@@ -2,6 +2,7 @@ package com.example.admin.identity.user.repository
 
 import com.example.admin.identity.user.model.User
 import com.example.admin.identity.user.model.UserStatus
+import com.example.admin.identity.user.model.UserType
 import jakarta.persistence.EntityManager
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -75,6 +76,7 @@ class UserRepositoryTest(
 
         val user = assertNotNull(userRepository.findByEmail("defaults@example.com"))
 
+        assertEquals(UserType.CUSTOMER, user.userType)
         assertEquals(UserStatus.PENDING, user.status)
         assertTrue(user.mustChangePassword)
         assertEquals(0, user.failedLoginAttempts)

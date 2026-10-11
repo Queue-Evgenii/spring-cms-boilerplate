@@ -38,6 +38,9 @@ class User(
     @Enumerated(EnumType.STRING)
     var status: UserStatus = UserStatus.PENDING
 
+    @Enumerated(EnumType.STRING)
+    var userType: UserType = UserType.CUSTOMER
+
     var failedLoginAttempts: Int = 0
     var lockedUntil: Instant? = null
 

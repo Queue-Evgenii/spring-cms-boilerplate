@@ -1,6 +1,7 @@
 package com.example.admin.identity.bootstrap
 
 import com.example.admin.identity.user.model.User
+import com.example.admin.identity.user.model.UserType
 import com.example.admin.identity.user.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.boot.ApplicationArguments
@@ -26,6 +27,8 @@ class UserSeeder(
 
         val hash = passwordEncoder.encode(properties.password)!!
         val user = User(email = email, passwordHash = hash)
+
+        user.userType = UserType.ADMIN
 
         userRepository.save(user)
 

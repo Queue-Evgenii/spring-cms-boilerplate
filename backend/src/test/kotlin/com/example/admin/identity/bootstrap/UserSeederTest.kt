@@ -2,6 +2,7 @@ package com.example.admin.identity.bootstrap
 
 import com.example.admin.identity.user.model.User
 import com.example.admin.identity.user.model.UserStatus
+import com.example.admin.identity.user.model.UserType
 import com.example.admin.identity.user.repository.UserRepository
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -41,6 +42,7 @@ class UserSeederTest(
         seeder().run(args)
 
         val admin = assertNotNull(userRepository.findByEmail(properties.email))
+        assertEquals(UserType.ADMIN, admin.userType)
         assertEquals(UserStatus.PENDING, admin.status)
         assertTrue(admin.mustChangePassword)
         assertTrue(admin.passwordHash.startsWith("{bcrypt}"))
