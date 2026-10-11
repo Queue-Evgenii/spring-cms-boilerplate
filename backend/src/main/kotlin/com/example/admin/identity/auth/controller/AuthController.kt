@@ -1,7 +1,9 @@
 package com.example.admin.identity.auth.controller
 
+import com.example.admin.identity.auth.dto.ChangePasswordRequest
 import com.example.admin.identity.auth.dto.LoginRequest
 import com.example.admin.identity.auth.dto.LoginResponse
+import com.example.admin.identity.auth.model.ChangePasswordResult
 import com.example.admin.identity.auth.model.LoginResult
 import com.example.admin.identity.auth.service.AuthService
 import jakarta.servlet.http.HttpServletRequest
@@ -37,6 +39,31 @@ class AuthController(
             LoginResult.Failed -> ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Invalid email or password"))
+        }
+    }
+
+    @PostMapping("/change-password")
+    fun changePassword(
+        @Valid @RequestBody request: ChangePasswordRequest,
+        httpRequest: HttpServletRequest,
+    ): ResponseEntity<Any> {
+        val result = authService.changePassword(
+            stepToken = request.stepToken,
+            password = request.newPassword,
+            ip = httpRequest.remoteAddr,
+            userAgent = httpRequest.getHeader(HttpHeaders.USER_AGENT),
+        )
+
+        return when (result) {
+            is ChangePasswordResult.Success -> ResponseEntity.ok(LoginResponse(result.nextStep, result.stepToken))
+            ChangePasswordResult.InvalidToken -> ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Invalid or expired token"))
+            is ChangePasswordResult.WeakPassword -> {
+                val problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Password does not meet requirements")
+                problem.setProperty("violations", result.violations)
+                ResponseEntity.badRequest().body(problem)
+            }
         }
     }
 }

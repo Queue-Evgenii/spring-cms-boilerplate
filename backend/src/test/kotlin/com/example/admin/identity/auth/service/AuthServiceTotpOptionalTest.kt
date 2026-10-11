@@ -1,5 +1,6 @@
 package com.example.admin.identity.auth.service
 
+import com.example.admin.identity.auth.model.ChangePasswordResult
 import com.example.admin.identity.auth.model.LoginResult
 import com.example.admin.identity.auth.model.NextStep
 import com.example.admin.identity.auth.repository.AuthEventRepository
@@ -24,6 +25,7 @@ class AuthServiceTotpOptionalTest(
     @Autowired private val userRepository: UserRepository,
     @Autowired private val authEventRepository: AuthEventRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
+    @Autowired private val loginChallengeService: LoginChallengeService,
 ) {
 
     private val email = "totp-optional-test@example.com"
@@ -73,5 +75,16 @@ class AuthServiceTotpOptionalTest(
         createAdmin(totpEnabled = false, mustChangePassword = true)
 
         assertEquals(NextStep.CHANGE_PASSWORD, assertIs<LoginResult.Success>(login()).nextStep)
+    }
+
+    @Test
+    fun `changing password completes login when totp is not required`() {
+        createAdmin(totpEnabled = false, mustChangePassword = true)
+        val userId = requireNotNull(userRepository.findByEmail(email)?.id)
+        val token = loginChallengeService.issue(userId, NextStep.CHANGE_PASSWORD)
+
+        val result = authService.changePassword(token, "New-Passw0rd!", ip = "127.0.0.1", userAgent = "test-agent")
+
+        assertEquals(ChangePasswordResult.Success(NextStep.COMPLETE, stepToken = null), result)
     }
 }

@@ -2,8 +2,10 @@ package com.example.admin.identity.auth.service
 
 import com.example.admin.identity.auth.model.AuthEventType
 import com.example.admin.identity.auth.model.AuthFailReason
+import com.example.admin.identity.auth.model.ChangePasswordResult
 import com.example.admin.identity.auth.model.LoginResult
 import com.example.admin.identity.auth.model.NextStep
+import com.example.admin.identity.auth.policy.PasswordPolicy
 import com.example.admin.identity.auth.settings.AuthSettings
 import com.example.admin.identity.user.model.User
 import com.example.admin.identity.user.model.UserStatus
@@ -22,6 +24,7 @@ class AuthService(
     private val authSettings: AuthSettings,
     private val authEventService: AuthEventService,
     private val loginChallengeService: LoginChallengeService,
+    private val passwordPolicy: PasswordPolicy,
     private val clock: Clock,
 ) {
     private val dummyHash: String = passwordEncoder.encode("dummy-password")!!
@@ -63,8 +66,7 @@ class AuthService(
         user.lockedUntil = null
 
         val nextStep = nextStep(user)
-        val stepToken = if (nextStep == NextStep.COMPLETE) null
-        else loginChallengeService.issue(requireNotNull(user.id), nextStep)
+        val stepToken = issueStepToken(user, nextStep)
         authEventService.write(
             type = AuthEventType.LOGIN_SUCCESS,
             userId = user.id,
@@ -120,4 +122,37 @@ class AuthService(
         )
         return LoginResult.Failed
     }
+
+    @Transactional
+    fun changePassword(stepToken: String, password: String, ip: String?, userAgent: String?): ChangePasswordResult {
+        val violations = passwordPolicy.validate(password)
+        if (violations.isNotEmpty()) return ChangePasswordResult.WeakPassword(violations)
+
+        val userId = loginChallengeService.consume(stepToken, NextStep.CHANGE_PASSWORD)
+            ?: return ChangePasswordResult.InvalidToken
+        val user = userRepository.findById(userId).orElse(null)
+            ?: return ChangePasswordResult.InvalidToken
+
+        if (user.status == UserStatus.BLOCKED || user.userType != UserType.ADMIN)
+            return ChangePasswordResult.InvalidToken
+
+        user.passwordHash = requireNotNull(passwordEncoder.encode(password))
+        user.mustChangePassword = false
+        user.passwordChangedAt = Instant.now(clock)
+
+        authEventService.write(
+            type = AuthEventType.PASSWORD_CHANGED,
+            userId = userId,
+            email = user.email,
+            ip = ip,
+            userAgent = userAgent,
+        )
+
+        val nextStep = nextStep(user)
+        return ChangePasswordResult.Success(nextStep, issueStepToken(user, nextStep))
+    }
+
+    private fun issueStepToken(user: User, nextStep: NextStep): String? =
+        if (nextStep == NextStep.COMPLETE) null
+        else loginChallengeService.issue(requireNotNull(user.id), nextStep)
 }

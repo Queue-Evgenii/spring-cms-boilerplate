@@ -1,7 +1,9 @@
 package com.example.admin.identity.auth.controller
 
 import com.example.admin.identity.auth.model.AuthEventType
+import com.example.admin.identity.auth.model.NextStep
 import com.example.admin.identity.auth.repository.AuthEventRepository
+import com.example.admin.identity.auth.service.LoginChallengeService
 import com.example.admin.identity.user.model.User
 import com.example.admin.identity.user.model.UserType
 import com.example.admin.identity.user.repository.UserRepository
@@ -31,6 +33,7 @@ class AuthControllerTest(
     @Autowired private val userRepository: UserRepository,
     @Autowired private val authEventRepository: AuthEventRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
+    @Autowired private val loginChallengeService: LoginChallengeService,
 ) {
 
     private val email = "controller-test@example.com"
@@ -119,5 +122,44 @@ class AuthControllerTest(
         )
         assertEquals("127.0.0.1", event.ip)
         assertEquals("test-agent", event.userAgent)
+    }
+
+    private fun changePasswordRequest(token: String, newPassword: String) = post("/api/auth/change-password")
+        .contentType(MediaType.APPLICATION_JSON)
+        .header(HttpHeaders.USER_AGENT, "test-agent")
+        .content("""{"stepToken":"$token","newPassword":"$newPassword"}""")
+
+    private fun changePasswordToken(): String {
+        val userId = requireNotNull(userRepository.findByEmail(email)?.id)
+        return loginChallengeService.issue(userId, NextStep.CHANGE_PASSWORD)
+    }
+
+    @Test
+    fun `change password returns next step`() {
+        mockMvc.perform(changePasswordRequest(changePasswordToken(), "New-Passw0rd!"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.nextStep").value("TOTP_SETUP"))
+            .andExpect(jsonPath("$.stepToken").isNotEmpty)
+    }
+
+    @Test
+    fun `weak password returns 400 with violations`() {
+        mockMvc.perform(changePasswordRequest(changePasswordToken(), "short"))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.violations").isArray)
+            .andExpect(jsonPath("$.violations").isNotEmpty)
+    }
+
+    @Test
+    fun `change password with invalid token returns 401`() {
+        mockMvc.perform(changePasswordRequest("not-a-real-token", "New-Passw0rd!"))
+            .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.detail").value("Invalid or expired token"))
+    }
+
+    @Test
+    fun `change password with blank fields returns 400`() {
+        mockMvc.perform(changePasswordRequest("", ""))
+            .andExpect(status().isBadRequest)
     }
 }
