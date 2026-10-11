@@ -15,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.test.context.ActiveProfiles
 import java.time.Instant
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 
 @SpringBootTest(properties = ["app.auth.totp-required=false"])
 @ActiveProfiles("test")
@@ -57,20 +58,20 @@ class AuthServiceTotpOptionalTest(
     fun `login completes when totp is not required and not configured`() {
         createAdmin(totpEnabled = false)
 
-        assertEquals(LoginResult.Success(NextStep.COMPLETE), login())
+        assertEquals(LoginResult.Success(NextStep.COMPLETE, stepToken = null), login())
     }
 
     @Test
     fun `configured totp is still requested when it is not mandatory`() {
         createAdmin(totpEnabled = true)
 
-        assertEquals(LoginResult.Success(NextStep.TOTP_REQUIRED), login())
+        assertEquals(NextStep.TOTP_REQUIRED, assertIs<LoginResult.Success>(login()).nextStep)
     }
 
     @Test
     fun `password change still comes first`() {
         createAdmin(totpEnabled = false, mustChangePassword = true)
 
-        assertEquals(LoginResult.Success(NextStep.CHANGE_PASSWORD), login())
+        assertEquals(NextStep.CHANGE_PASSWORD, assertIs<LoginResult.Success>(login()).nextStep)
     }
 }

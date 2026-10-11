@@ -8,4 +8,5 @@ class AuthProperties(
     val maxFailedAttempts: Int = 5,
     val lockDuration: Duration = Duration.ofMinutes(15),
     val totpRequired: Boolean = true,
+    val stepTokenTtl: Duration = Duration.ofMinutes(10),
 )

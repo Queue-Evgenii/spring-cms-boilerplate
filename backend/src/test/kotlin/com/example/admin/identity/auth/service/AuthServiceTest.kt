@@ -24,6 +24,7 @@ import org.springframework.test.context.ActiveProfiles
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -55,6 +56,7 @@ class AuthServiceTest(
     @Autowired private val authEventRepository: AuthEventRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val clock: MutableClock,
+    @Autowired private val loginChallengeService: LoginChallengeService,
 ) {
 
     private val email = "auth-test@example.com"
@@ -214,20 +216,38 @@ class AuthServiceTest(
     fun `fresh admin must change password first`() {
         createUser(mustChangePassword = true)
 
-        assertEquals(LoginResult.Success(NextStep.CHANGE_PASSWORD), login())
+        val result = assertIs<LoginResult.Success>(login())
+
+        assertEquals(NextStep.CHANGE_PASSWORD, result.nextStep)
+        assertNotNull(result.stepToken)
     }
 
     @Test
     fun `admin without totp is sent to totp setup`() {
         createUser(mustChangePassword = false, totpEnabled = false)
 
-        assertEquals(LoginResult.Success(NextStep.TOTP_SETUP), login())
+        val result = assertIs<LoginResult.Success>(login())
+
+        assertEquals(NextStep.TOTP_SETUP, result.nextStep)
+        assertNotNull(result.stepToken)
     }
 
     @Test
     fun `admin with totp is asked for totp code`() {
         createUser(mustChangePassword = false, totpEnabled = true)
 
-        assertEquals(LoginResult.Success(NextStep.TOTP_REQUIRED), login())
+        val result = assertIs<LoginResult.Success>(login())
+
+        assertEquals(NextStep.TOTP_REQUIRED, result.nextStep)
+        assertNotNull(result.stepToken)
+    }
+
+    @Test
+    fun `issued step token belongs to the user and the step`() {
+        val user = createUser(mustChangePassword = true)
+
+        val result = assertIs<LoginResult.Success>(login())
+
+        assertEquals(user.id, loginChallengeService.consume(assertNotNull(result.stepToken), NextStep.CHANGE_PASSWORD))
     }
 }

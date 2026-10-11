@@ -7,4 +7,5 @@ class PropertiesAuthSettings(private val properties: AuthProperties) : AuthSetti
     override fun maxFailedAttempts() = properties.maxFailedAttempts
     override fun lockDuration() = properties.lockDuration
     override fun totpRequired() = properties.totpRequired
+    override fun stepTokenTtl() = properties.stepTokenTtl
 }

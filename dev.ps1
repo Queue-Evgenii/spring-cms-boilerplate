@@ -118,6 +118,7 @@ switch ($Action) {
 
     'test' {
         Start-Postgres
+        Start-Redis
         Ensure-TestDatabase
 
         # cleanTest сбрасывает кэш Gradle, иначе при неизменном коде тесты пропускаются как UP-TO-DATE

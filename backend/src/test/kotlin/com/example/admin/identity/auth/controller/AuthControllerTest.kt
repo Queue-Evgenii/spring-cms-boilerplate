@@ -68,6 +68,7 @@ class AuthControllerTest(
         mockMvc.perform(loginRequest(json(email, password)))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.nextStep").value("TOTP_SETUP"))
+            .andExpect(jsonPath("$.stepToken").isNotEmpty)
     }
 
     @Test

@@ -33,7 +33,7 @@ class AuthController(
         )
 
         return when (result) {
-            is LoginResult.Success -> ResponseEntity.ok(LoginResponse(result.nextStep))
+            is LoginResult.Success -> ResponseEntity.ok(LoginResponse(result.nextStep, result.stepToken))
             LoginResult.Failed -> ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Invalid email or password"))

@@ -21,6 +21,7 @@ class AuthService(
     private val passwordEncoder: PasswordEncoder,
     private val authSettings: AuthSettings,
     private val authEventService: AuthEventService,
+    private val loginChallengeService: LoginChallengeService,
     private val clock: Clock,
 ) {
     private val dummyHash: String = passwordEncoder.encode("dummy-password")!!
@@ -62,6 +63,8 @@ class AuthService(
         user.lockedUntil = null
 
         val nextStep = nextStep(user)
+        val stepToken = if (nextStep == NextStep.COMPLETE) null
+        else loginChallengeService.issue(requireNotNull(user.id), nextStep)
         authEventService.write(
             type = AuthEventType.LOGIN_SUCCESS,
             userId = user.id,
@@ -70,7 +73,7 @@ class AuthService(
             userAgent = userAgent,
             details = mapOf("stage" to "PASSWORD", "nextStep" to nextStep.name),
         )
-        return LoginResult.Success(nextStep)
+        return LoginResult.Success(nextStep, stepToken)
     }
 
     private fun registerFailedAttempt(user: User, now: Instant, ip: String?, userAgent: String?) {

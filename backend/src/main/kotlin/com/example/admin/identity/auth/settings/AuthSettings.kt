@@ -6,4 +6,5 @@ interface AuthSettings {
     fun maxFailedAttempts(): Int
     fun lockDuration(): Duration
     fun totpRequired(): Boolean
+    fun stepTokenTtl(): Duration
 }
