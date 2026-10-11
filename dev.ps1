@@ -1,8 +1,9 @@
 ﻿param(
-    [Parameter(Position = 0)][ValidateSet('start', 'stop', 'status')][string]$Action = 'status',
+    [Parameter(Position = 0)][ValidateSet('start', 'stop', 'status', 'test')][string]$Action = 'status',
     [switch]$Backend,
     [switch]$Frontend,
-    [switch]$All
+    [switch]$All,
+    [string]$Filter
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -12,6 +13,8 @@ $BackendDir   = "$Root\backend"
 $FrontendDir  = "$Root\frontend-admin"
 $PgBin        = "$env:USERPROFILE\scoop\apps\postgresql\current\bin"
 $PgData       = "$env:USERPROFILE\scoop\apps\postgresql\current\data"
+$RedisBin     = "$env:USERPROFILE\scoop\apps\redis\current"
+$RedisData    = "$env:USERPROFILE\scoop\persist\redis\data"
 
 function Get-BackendProcess {
     Get-CimInstance Win32_Process | Where-Object { 
@@ -48,11 +51,45 @@ function Stop-Postgres {
     }
 }
 
+function Ensure-TestDatabase {
+    $psql = "$PgBin\psql.exe"
+    $exists = & $psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'cms_boilerplate_test'"
+    if ($exists) { return }
+    Write-Host "Тестовая БД: создаю cms_boilerplate_test..." -ForegroundColor Yellow
+    & $psql -U postgres -d postgres -c "CREATE DATABASE cms_boilerplate_test" | Out-Null
+    Write-Host "Тестовая БД: создана" -ForegroundColor Green
+}
+
+function Start-Redis {
+    if (Get-Process redis-server -ErrorAction SilentlyContinue) {
+        Write-Host "Redis: уже работает" -ForegroundColor DarkGray
+        return
+    }
+    Write-Host "Redis: запускаю..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Force $RedisData | Out-Null
+    Start-Process "$RedisBin\redis-server.exe" -ArgumentList "--bind 127.0.0.1 --dir `"$RedisData`"" -WindowStyle Hidden
+
+    for ($i = 0; $i -lt 20; $i++) {
+        Start-Sleep -Milliseconds 500
+        if (Get-NetTCPConnection -LocalPort 6379 -State Listen -ErrorAction SilentlyContinue) { break }
+    }
+    Write-Host "Redis: запущен (порт 6379)" -ForegroundColor Green
+}
+
+function Stop-Redis {
+    if (Get-Process redis-server -ErrorAction SilentlyContinue) {
+        Write-Host "Redis: останавливаю..." -ForegroundColor Yellow
+        & "$RedisBin\redis-cli.exe" shutdown | Out-Null
+        Write-Host "Redis: остановлен" -ForegroundColor Red
+    }
+}
+
 switch ($Action) {
     'start' {
         $runAll = -not $Backend -and -not$Frontend
-        
+
         Start-Postgres
+        Start-Redis
 
         if ($runAll -or$Backend) {
             if (Get-BackendProcess) {
@@ -79,6 +116,31 @@ switch ($Action) {
         }
     }
 
+    'test' {
+        Start-Postgres
+        Ensure-TestDatabase
+
+        # cleanTest сбрасывает кэш Gradle, иначе при неизменном коде тесты пропускаются как UP-TO-DATE
+        $gradleArgs = @('cleanTest', 'test')
+        if ($Filter) { $gradleArgs += @('--tests', $Filter) }
+
+        Write-Host "Backend: запускаю тесты..." -ForegroundColor Yellow
+        Push-Location $BackendDir
+        try {
+            & .\gradlew @gradleArgs
+            $exitCode = $LASTEXITCODE
+        } finally {
+            Pop-Location
+        }
+
+        if ($exitCode -eq 0) {
+            Write-Host "Тесты: прошли" -ForegroundColor Green
+        } else {
+            Write-Host "Тесты: есть ошибки (отчёт: backend\build\reports\tests\test\index.html)" -ForegroundColor Red
+        }
+        exit $exitCode
+    }
+
     'stop' {
         $bProc = Get-BackendProcess
         if ($bProc) {
@@ -97,6 +159,7 @@ switch ($Action) {
         }
 
         if ($All) {
+            Stop-Redis
             Stop-Postgres
         }
     }
@@ -107,6 +170,10 @@ switch ($Action) {
         $pgState = if (Get-Process postgres -ErrorAction SilentlyContinue) { "запущен (5432)" } else { "остановлен" }
         $pgColor = if ($pgState -match 'запущен') { 'Green' } else { 'DarkGray' }
         Write-Host "PostgreSQL: $pgState" -ForegroundColor $pgColor
+
+        $rState = if (Get-Process redis-server -ErrorAction SilentlyContinue) { "запущен (6379)" } else { "остановлен" }
+        $rColor = if ($rState -match 'запущен') { 'Green' } else { 'DarkGray' }
+        Write-Host "Redis:      $rState" -ForegroundColor $rColor
 
         $bState = if (Get-BackendProcess) { "запущен -> http://localhost:8080/" } else { "остановлен" }
         $bColor = if ($bState -match 'запущен') { 'Green' } else { 'DarkGray' }

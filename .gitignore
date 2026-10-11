@@ -29,6 +29,9 @@ coverage/
 .gradle/
 .kotlin/
 
+# Personal mentoring tracker
+TASKS.md
+
 # IDE files
 .idea/
 *.iml
